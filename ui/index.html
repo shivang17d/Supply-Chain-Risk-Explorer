@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Supply Chain Risk Explorer</title><link rel="stylesheet" href="/ui/style.css"></head>
+<body><div class="shell">
+  <aside><div class="brand"><span class="mark">G</span><div><b>Supply Chain Explorer</b><small>Supplier and logistics intelligence</small></div></div>
+    <section><div class="row"><h3>Supply chain sources</h3><span class="pill" id="count">0 files</span></div>
+      <label class="upload" for="file"><strong>＋ Add supply-chain reports</strong><small>Supplier, procurement, logistics reports</small></label><input id="file" type="file" accept=".pdf,.docx,.txt,.md,.csv">
+      <p id="uploadStatus" class="muted">Extract suppliers, manufacturers, parts, regions, and risks.</p><div id="docs"></div>
+    </section><div class="aside-foot">Supplier links · Risk and logistics paths</div>
+  </aside>
+  <main><header><div><span class="eyebrow">SUPPLY CHAIN INTELLIGENCE</span><h1>Trace supply chain connections</h1><p>Explore suppliers, manufacturers, components, logistics, and regions.</p></div><span class="status"><i></i> Local workspace</span></header>
+    <div class="workspace"><section class="graph-panel"><div class="graph-head"><div><h2>Supply-chain graph</h2><p>Click an entity to inspect its connections</p></div><button id="reload">↻ Refresh</button></div>
+      <div id="graph"><div class="graph-empty">Upload a supply-chain report to build the first graph.</div></div><div class="legend"><span><i class="entity-dot"></i> Entity</span><span>━━ Relationship</span><span id="graphCount">0 entities</span></div>
+    </section><section class="chat-panel"><div class="chat-head"><div class="spark">✳</div><div><b>Ask the supply chain graph</b><small>Answers include source evidence</small></div></div>
+      <div id="messages" class="messages"><div class="starter">Try: Which manufacturers connect to this supplier, and what source evidence supports the relationship?</div></div>
+      <form id="ask"><textarea id="question" rows="1" placeholder="Ask a supply-chain question…"></textarea><button>↑</button></form><div class="hint">Enter to send · Shift + Enter for a new line</div>
+    </section></div>
+  </main>
+</div><script src="/ui/app.js"></script></body></html>
