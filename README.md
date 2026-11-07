@@ -27,6 +27,38 @@ Questions can follow connections up to two graph steps — for example, _"Which 
 
 ---
 
+## 📂 Project Structure
+
+```text
+supply-chain-risk-explorer/
+├── backend/                     # 🐍 FastAPI Backend (Python)
+│   ├── app/
+│   │   ├── __init__.py
+│   │   └── main.py              # REST API routes, Neo4j Cypher queries & OpenAI Graph-RAG logic
+│   └── requirements.txt         # Python backend dependencies
+│
+├── frontend/                    # ⚛️ Next.js 14 Frontend (TypeScript + Tailwind CSS)
+│   ├── src/
+│   │   └── app/
+│   │       ├── globals.css      # Global Tailwind & Markdown prose styles
+│   │       ├── layout.tsx       # Root Next.js App Router layout & metadata
+│   │       └── page.tsx         # Supply Chain Explorer UI, D3 force graph & chat interface
+│   ├── next.config.mjs          # Next.js configuration
+│   ├── package.json             # Frontend dependencies & scripts
+│   ├── postcss.config.mjs       # PostCSS configuration
+│   ├── tailwind.config.ts       # Tailwind CSS configuration
+│   └── tsconfig.json            # TypeScript configuration
+│
+├── uploads/                     # 📁 Uploaded source documents (git-ignored)
+├── .env.example                 # 🔑 Environment variable template
+├── .gitignore                   # Git ignore rules
+├── Dockerfile                   # 🐳 Multi-stage Docker build (Next.js + FastAPI)
+├── docker-compose.yml           # 🧩 Docker Compose orchestration (Neo4j + App)
+└── README.md                    # 📖 Project documentation
+```
+
+---
+
 ## ⚙️ Architecture & Features
 
 - **Automated Graph Extraction:** Splits uploaded documents into chunks and extracts structured supply-chain entities and relationships into Neo4j, linking every relationship edge to the exact source chunk IDs that support it.
