@@ -169,6 +169,15 @@ export default function SupplyChainExplorerPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Auto-dismiss status notification after 3 seconds
+  useEffect(() => {
+    if (!statusMsg) return;
+    const timer = setTimeout(() => {
+      setStatusMsg(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [statusMsg]);
+
   // Upload file handler
   const handleFileUpload = async (file: File) => {
     if (!file) return;
