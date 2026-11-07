@@ -59,62 +59,60 @@ supply-chain-risk-explorer/
 
 ---
 
-## 🏗️ System Architecture (Graph RAG)
+## 🏗️ System Architecture: Knowledge Graph vs. Graph RAG
+
+- **Knowledge Graph (Storage Layer):** The structured network of nodes (`:Entity`, `:Chunk`, `:Document`) and typed relationships (`:SUPPLIES`, `:MANUFACTURES`, `:DISRUPTED_BY`, etc.) stored in **Neo4j**.
+- **Graph RAG (Retrieval-Augmented Generation Pipeline):** The AI workflow that **Retrieves** multi-hop paths + source chunks from the Knowledge Graph, **Augments** the prompt with structured paths and text evidence, and **Generates** a grounded answer with citations.
 
 ```mermaid
 flowchart TB
     subgraph Client["⚛️ Next.js 16 Frontend (React 19 + Tailwind CSS + D3.js)"]
         UI_Upload["📄 Document Upload UI\n(Drag & Drop / Delete)"]
-        UI_Graph["🕸️ D3.js Force-Directed Graph\n(Filter, Zoom, Hover, Click-to-Ask)"]
-        UI_Chat["💬 Grounded Chat UI\n(Markdown + Source Citations)"]
+        UI_Graph["🕸️ D3.js Knowledge Graph Viewer\n(Filter, Zoom, Hover, Click-to-Ask)"]
+        UI_Chat["💬 Graph RAG Chat UI\n(Markdown Answer + Source Citations)"]
     end
 
-    subgraph Backend["🐍 FastAPI Backend (backend/app/main.py)"]
-        API_Docs["POST / DELETE /api/documents"]
-        Parser["📑 Document Parser & Chunker\n(pypdf, python-docx, TXT/MD/CSV → 1300-word chunks)"]
-        Pool["⚡ Parallel Extraction Pool\n(ThreadPoolExecutor · up to 8 workers)"]
-        API_Graph["GET /api/graph"]
-        API_Chat["POST /api/chat"]
-        Retriever["🔍 Multi-Hop Graph Retriever\n(Entity Seed Match + 1..2 Hop Traversal)"]
+    subgraph Ingestion["1️⃣ Knowledge Graph Construction (Ingestion Pipeline)"]
+        API_Docs["POST /api/documents"]
+        Parser["📑 Document Parser & Chunker\n(PDF, DOCX, TXT, MD, CSV → 1300-word chunks)"]
+        Pool["⚡ Parallel LLM Extractor\n(ThreadPoolExecutor · up to 8 workers)"]
+        LLM_Extract["🤖 OpenAI (gpt-4o-mini)\nStructured JSON Entity & Edge Extraction"]
     end
 
-    subgraph LLM["🤖 OpenAI API (gpt-4o-mini)"]
-        LLM_Extract["Structured JSON Extraction\n(Entities + Typed Relationships)"]
-        LLM_Answer["Grounded Answer Synthesis\n(Strict Graph Path & Passage Grounding)"]
-    end
-
-    subgraph GraphDB["🗄️ Neo4j 5 Knowledge Graph"]
+    subgraph KG["🗄️ Neo4j 5 Knowledge Graph (Structured Graph Store)"]
         direction LR
         DocNode[("(:Document)")]
         ChunkNode[("(:Chunk)")]
-        EntityA[("(:Entity)\nSupplier / Manufacturer / etc.")]
-        EntityB[("(:Entity)\nComponent / Port / RiskEvent / etc.")]
+        EntityA[("(:Entity)\nSupplier / Manufacturer")]
+        EntityB[("(:Entity)\nComponent / Port / RiskEvent")]
 
         ChunkNode -->|":FROM_DOCUMENT"| DocNode
         ChunkNode -->|":MENTIONS"| EntityA
         ChunkNode -->|":MENTIONS"| EntityB
-        EntityA -->|":SUPPLIES / :MANUFACTURES / :DISRUPTED_BY\n{evidence_ids: [chunk_id, ...]}"| EntityB
+        EntityA -->|":SUPPLIES / :DISRUPTED_BY\n{evidence_ids: [chunk_id]}"| EntityB
     end
 
-    %% Ingestion Flow
-    UI_Upload -->|"Multipart Upload"| API_Docs
-    API_Docs --> Parser
-    Parser -->|"Chunks"| Pool
-    Pool -->|"Prompt + Chunk"| LLM_Extract
-    LLM_Extract -->|"JSON {entities, relationships}"| Pool
-    Pool -->|"Cypher MERGE Nodes & Edges\n+ Attach evidence_ids"| GraphDB
+    subgraph GraphRAG["2️⃣ Graph RAG Pipeline (Retrieval → Augmentation → Generation)"]
+        API_Chat["POST /api/chat"]
+        StepR["🔍 [R] Graph Retrieval\nMatch Seed Entity + Traverse 1..2 Hops\n+ Fetch Linked Source Chunks"]
+        StepA["🧩 [A] Context Augmentation\nCombine Multi-Hop Graph Paths\n+ Verbatim Document Passages"]
+        StepG["🤖 [G] Grounded Generation\nOpenAI (gpt-4o-mini) Synthesizes\nAnswer with [Source N] Citations"]
+    end
 
-    %% Graph Visualization Flow
-    UI_Graph -->|"Fetch Nodes & Edges"| API_Graph
-    API_Graph -->|"Cypher Top 120 Entities & 240 Links"| GraphDB
+    %% Flow 1: Build the Knowledge Graph
+    UI_Upload -->|"Upload Report"| API_Docs
+    API_Docs --> Parser -->|"Text Chunks"| Pool
+    Pool <-->|"Extract Entities & Relations"| LLM_Extract
+    Pool -->|"Cypher MERGE Nodes, Edges & evidence_ids"| KG
 
-    %% Graph RAG Query Flow
-    UI_Chat -->|"User Question"| API_Chat
-    API_Chat --> Retriever
-    Retriever -->|"1. Match Seed Entities\n2. Traverse (seed)-[*1..2]-(other)\n3. Unwind rel.evidence_ids → Chunk"| GraphDB
-    GraphDB -->|"Graph Paths + Supporting Chunks"| Retriever
-    Retriever -->|"Question + Graph Context + Evidence"| LLM_Answer
-    LLM_Answer -->|"Markdown Answer + Cited Sources"| UI_Chat
+    %% Visual Inspection of the Knowledge Graph
+    UI_Graph <-->|"GET /api/graph (Nodes & Edges)"| KG
+
+    %% Flow 2: Graph RAG Q&A
+    UI_Chat -->|"User Question"| API_Chat --> StepR
+    StepR <-->|"Cypher: (seed)-[*1..2]-(other)\n+ Unwind rel.evidence_ids"| KG
+    StepR -->|"Subgraph + Chunks"| StepA -->|"Augmented Prompt"| StepG
+    StepG -->|"Markdown Answer + Sources"| UI_Chat
 ```
 
 ---
