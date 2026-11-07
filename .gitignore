@@ -14,6 +14,14 @@ build/
 venv/
 env/
 
+# Next.js / Node
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+next-env.d.ts
+frontend/next-env.d.ts
+
 # Uploads (user data)
 uploads/
 

@@ -147,6 +147,6 @@ def chat(req:Question):
         if key not in seen and x['evidence']:
             seen.add(key); unique.append({"document":x['document'],"text":x['evidence']})
     return {"answer":answer,"sources":unique[:8]}
-app.mount('/ui',StaticFiles(directory='ui'),name='ui')
 @app.get('/')
 def index(): return FileResponse('ui/index.html')
+app.mount('/',StaticFiles(directory='ui',html=True),name='ui')
