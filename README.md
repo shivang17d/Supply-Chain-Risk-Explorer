@@ -59,6 +59,66 @@ supply-chain-risk-explorer/
 
 ---
 
+## 🏗️ System Architecture (Graph RAG)
+
+```mermaid
+flowchart TB
+    subgraph Client["⚛️ Next.js 16 Frontend (React 19 + Tailwind CSS + D3.js)"]
+        UI_Upload["📄 Document Upload UI\n(Drag & Drop / Delete)"]
+        UI_Graph["🕸️ D3.js Force-Directed Graph\n(Filter, Zoom, Hover, Click-to-Ask)"]
+        UI_Chat["💬 Grounded Chat UI\n(Markdown + Source Citations)"]
+    end
+
+    subgraph Backend["🐍 FastAPI Backend (backend/app/main.py)"]
+        API_Docs["POST / DELETE /api/documents"]
+        Parser["📑 Document Parser & Chunker\n(pypdf, python-docx, TXT/MD/CSV → 1300-word chunks)"]
+        Pool["⚡ Parallel Extraction Pool\n(ThreadPoolExecutor · up to 8 workers)"]
+        API_Graph["GET /api/graph"]
+        API_Chat["POST /api/chat"]
+        Retriever["🔍 Multi-Hop Graph Retriever\n(Entity Seed Match + 1..2 Hop Traversal)"]
+    end
+
+    subgraph LLM["🤖 OpenAI API (gpt-4o-mini)"]
+        LLM_Extract["Structured JSON Extraction\n(Entities + Typed Relationships)"]
+        LLM_Answer["Grounded Answer Synthesis\n(Strict Graph Path & Passage Grounding)"]
+    end
+
+    subgraph GraphDB["🗄️ Neo4j 5 Knowledge Graph"]
+        direction LR
+        DocNode[("(:Document)")]
+        ChunkNode[("(:Chunk)")]
+        EntityA[("(:Entity)\nSupplier / Manufacturer / etc.")]
+        EntityB[("(:Entity)\nComponent / Port / RiskEvent / etc.")]
+
+        ChunkNode -->|":FROM_DOCUMENT"| DocNode
+        ChunkNode -->|":MENTIONS"| EntityA
+        ChunkNode -->|":MENTIONS"| EntityB
+        EntityA -->|":SUPPLIES / :MANUFACTURES / :DISRUPTED_BY\n{evidence_ids: [chunk_id, ...]}"| EntityB
+    end
+
+    %% Ingestion Flow
+    UI_Upload -->|"Multipart Upload"| API_Docs
+    API_Docs --> Parser
+    Parser -->|"Chunks"| Pool
+    Pool -->|"Prompt + Chunk"| LLM_Extract
+    LLM_Extract -->|"JSON {entities, relationships}"| Pool
+    Pool -->|"Cypher MERGE Nodes & Edges\n+ Attach evidence_ids"| GraphDB
+
+    %% Graph Visualization Flow
+    UI_Graph -->|"Fetch Nodes & Edges"| API_Graph
+    API_Graph -->|"Cypher Top 120 Entities & 240 Links"| GraphDB
+
+    %% Graph RAG Query Flow
+    UI_Chat -->|"User Question"| API_Chat
+    API_Chat --> Retriever
+    Retriever -->|"1. Match Seed Entities\n2. Traverse (seed)-[*1..2]-(other)\n3. Unwind rel.evidence_ids → Chunk"| GraphDB
+    GraphDB -->|"Graph Paths + Supporting Chunks"| Retriever
+    Retriever -->|"Question + Graph Context + Evidence"| LLM_Answer
+    LLM_Answer -->|"Markdown Answer + Cited Sources"| UI_Chat
+```
+
+---
+
 ## ⚙️ Architecture & Features
 
 - **Automated Graph Extraction:** Splits uploaded documents into chunks and extracts structured supply-chain entities and relationships into Neo4j, linking every relationship edge to the exact source chunk IDs that support it.
