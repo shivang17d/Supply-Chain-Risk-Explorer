@@ -16,7 +16,7 @@ Questions can follow connections up to two graph steps — for example, _"Which 
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | [Next.js 14](https://nextjs.org/) (App Router) · [React 18](https://react.dev/) · [TypeScript](https://www.typescriptlang.org/) · [Tailwind CSS](https://tailwindcss.com/) |
+| **Frontend** | [Next.js 16](https://nextjs.org/) (App Router) · [React 19](https://react.dev/) · [TypeScript](https://www.typescriptlang.org/) · [Tailwind CSS](https://tailwindcss.com/) |
 | **Graph Visualization** | [D3.js v7](https://d3js.org/) (Force-directed interactive graph, zoom/pan, entity filtering) |
 | **UI Components & Markdown** | [Lucide Icons](https://lucide.dev/) · [react-markdown](https://github.com/remarkjs/react-markdown) |
 | **Backend** | [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) (Python 3.12) |
@@ -37,7 +37,7 @@ supply-chain-risk-explorer/
 │   │   └── main.py              # REST API routes, Neo4j Cypher queries & OpenAI Graph-RAG logic
 │   └── requirements.txt         # Python backend dependencies
 │
-├── frontend/                    # ⚛️ Next.js 14 Frontend (TypeScript + Tailwind CSS)
+├── frontend/                    # ⚛️ Next.js 16 Frontend (TypeScript + Tailwind CSS)
 │   ├── src/
 │   │   └── app/
 │   │       ├── globals.css      # Global Tailwind & Markdown prose styles
