@@ -23,18 +23,32 @@ async function refreshDocs(){
     const r = await fetch('/api/documents'), a = await r.json();
     count.textContent = `${a.length} file${a.length===1?'':'s'}`;
     docs.innerHTML = a.map(d =>
-      `<div class="doc">
+      `<div class="doc" id="doc-${esc(d.id)}">
         <span title="${esc(d.name)}">📄 ${esc(d.name)}</span>
-        <button onclick="removeDoc('${d.id}')">×</button>
+        <button type="button" class="del-btn" title="Delete document" onclick="removeDoc('${esc(d.id)}', '${esc(d.name)}')">🗑️</button>
       </div>`
     ).join('');
   } catch(e) {
     status.textContent = 'Neo4j is not connected. Start with Docker Compose.';
   }
 }
-window.removeDoc = async id => {
-  await fetch('/api/documents/'+id, {method:'DELETE'});
-  refreshDocs(); refreshGraph();
+window.removeDoc = async (id, name) => {
+  const row = document.getElementById('doc-' + id);
+  if (row) row.style.opacity = '0.5';
+  status.textContent = `Deleting ${name || 'document'}…`;
+  try {
+    const r = await fetch('/api/documents/' + encodeURIComponent(id), {method:'DELETE'});
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to delete document');
+    }
+    status.textContent = `Deleted ${name || 'document'}.`;
+    await refreshDocs();
+    await refreshGraph();
+  } catch (e) {
+    if (row) row.style.opacity = '1';
+    status.textContent = e.message || 'Could not delete document.';
+  }
 };
 
 // ── Graph (D3 force-directed) ────────────────────────────────────

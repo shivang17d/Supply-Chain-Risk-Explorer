@@ -100,8 +100,28 @@ async def upload(file:UploadFile=File(...)):
 @app.delete("/api/documents/{did}")
 def delete_document(did:str):
     with driver() as d:
-        records,_,_=d.execute_query("MATCH (doc:Document {id:$id}) OPTIONAL MATCH (c:Chunk)-[:FROM_DOCUMENT]->(doc) WITH doc,collect(c) AS chunks FOREACH (c IN chunks | DETACH DELETE c) DETACH DELETE doc RETURN doc.id AS id",id=did)
-    if not records: raise HTTPException(404,"Document not found")
+        records,_,_=d.execute_query(
+            "MATCH (doc:Document {id:$id}) "
+            "WITH doc, doc.id AS deleted_id "
+            "OPTIONAL MATCH (c:Chunk)-[:FROM_DOCUMENT]->(doc) "
+            "WITH doc, deleted_id, collect(c) AS chunks, collect(c.id) AS cids "
+            "FOREACH (c IN chunks | DETACH DELETE c) "
+            "DETACH DELETE doc "
+            "RETURN deleted_id AS id, cids",
+            id=did
+        )
+        if not records: raise HTTPException(404,"Document not found")
+        cids = records[0]["cids"] or []
+        if cids:
+            d.execute_query(
+                "MATCH (:Entity)-[r]->(:Entity) "
+                "WHERE r.evidence_ids IS NOT NULL "
+                "SET r.evidence_ids = [x IN r.evidence_ids WHERE NOT x IN $cids] "
+                "WITH r WHERE size(r.evidence_ids) = 0 "
+                "DELETE r",
+                cids=cids
+            )
+        d.execute_query("MATCH (e:Entity) WHERE NOT (:Chunk)-[:MENTIONS]->(e) AND NOT (e)--() DELETE e")
     for p in UPLOADS.glob(f'{did}_*'): p.unlink(missing_ok=True)
     return {"deleted":did}
 @app.get("/api/graph")
