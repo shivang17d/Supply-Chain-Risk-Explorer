@@ -1,4 +1,5 @@
-import json, os, re, uuid
+import asyncio, json, os, re, uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -61,38 +62,42 @@ def documents():
             records,_,_=d.execute_query("MATCH (doc:Document) RETURN doc.id AS id,doc.name AS name,doc.status AS status,doc.created AS created ORDER BY doc.created DESC")
         return [dict(r) for r in records]
     except Exception as e: raise HTTPException(503,str(e))
+def _index_document(did:str, name:str, path:Path):
+    text=read_text(path,name).strip()
+    if not text: raise HTTPException(422,"No readable text found")
+    chunks=split_text(text)
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(chunks)))) as pool:
+        extractions=list(pool.map(extract, chunks))
+    with driver() as d:
+        d.execute_query("CREATE (doc:Document {id:$id,name:$name,status:'processing',created:datetime()})",id=did,name=name)
+        for idx,(chunk,extracted) in enumerate(zip(chunks,extractions)):
+            cid=str(uuid.uuid4())
+            d.execute_query("MATCH (doc:Document {id:$did}) CREATE (c:Chunk {id:$cid, text:$text, ordinal:$ord})-[:FROM_DOCUMENT]->(doc)",did=did,cid=cid,text=chunk,ord=idx)
+            for e in extracted.get('entities',[]):
+                ename=str(e.get('name','')).strip()
+                if not ename: continue
+                key=ename.casefold()
+                proposed_type=re.sub(r'[^A-Za-z0-9_]','',str(e.get('type','')))
+                typ=proposed_type if proposed_type in ENTITY_TYPES else 'Company'
+                d.execute_query("MATCH (c:Chunk {id:$cid}) MERGE (e:Entity {key:$key}) ON CREATE SET e.name=$name,e.type=$type,e.description=$desc MERGE (c)-[:MENTIONS]->(e)",cid=cid,key=key,name=ename,type=typ,desc=str(e.get('description',''))[:400])
+            for rel in extracted.get('relationships',[]):
+                src=str(rel.get('source','')).strip(); dst=str(rel.get('target','')).strip()
+                if not src or not dst: continue
+                akey=src.casefold(); bkey=dst.casefold()
+                proposed_label=re.sub(r'[^A-Z0-9_]','_',str(rel.get('type','')).upper())[:40]
+                label=proposed_label if proposed_label in RELATION_TYPES else 'RELATED_TO'
+                d.execute_query(f"MATCH (c:Chunk {{id:$cid}}) MERGE (a:Entity {{key:$a}}) ON CREATE SET a.name=$an,a.type='Entity' MERGE (b:Entity {{key:$b}}) ON CREATE SET b.name=$bn,b.type='Entity' MERGE (c)-[:MENTIONS]->(a) MERGE (c)-[:MENTIONS]->(b) MERGE (a)-[r:{label}]->(b) ON CREATE SET r.description=$desc SET r.evidence_ids=coalesce(r.evidence_ids,[])+CASE WHEN $cid IN coalesce(r.evidence_ids,[]) THEN [] ELSE [$cid] END",cid=cid,a=akey,an=src,b=bkey,bn=dst,desc=str(rel.get('description',''))[:400])
+        d.execute_query("MATCH (doc:Document {id:$id}) SET doc.status='indexed'",id=did)
+    return {"id":did,"name":name,"status":"indexed","chunks":len(chunks)}
+
 @app.post("/api/documents")
 async def upload(file:UploadFile=File(...)):
     limit=int(os.getenv("MAX_UPLOAD_MB","20"))*1024*1024; data=await file.read(limit+1)
     if len(data)>limit: raise HTTPException(413,"File exceeds upload limit")
     name=re.sub(r"[^\w. -]","_",file.filename or "upload"); did=str(uuid.uuid4()); path=UPLOADS/f"{did}_{name}"; path.write_bytes(data)
     try:
-        text=read_text(path,name).strip()
-        if not text: raise HTTPException(422,"No readable text found")
-        with driver() as d:
-            d.execute_query("CREATE (doc:Document {id:$id,name:$name,status:'processing',created:datetime()})",id=did,name=name)
-            for idx,chunk in enumerate(split_text(text)):
-                cid=str(uuid.uuid4()); extracted=extract(chunk)
-                d.execute_query("MATCH (doc:Document {id:$did}) CREATE (c:Chunk {id:$cid, text:$text, ordinal:$ord})-[:FROM_DOCUMENT]->(doc)",did=did,cid=cid,text=chunk,ord=idx)
-                entmap={}
-                for e in extracted.get('entities',[]):
-                    ename=str(e.get('name','')).strip()
-                    if not ename: continue
-                    key=ename.casefold(); entmap[key]=ename
-                    proposed_type=re.sub(r'[^A-Za-z0-9_]','',str(e.get('type','')))
-                    typ=proposed_type if proposed_type in ENTITY_TYPES else 'Company'
-                    d.execute_query("MATCH (c:Chunk {id:$cid}) MERGE (e:Entity {key:$key}) ON CREATE SET e.name=$name,e.type=$type,e.description=$desc MERGE (c)-[:MENTIONS]->(e)",cid=cid,key=key,name=ename,type=typ,desc=str(e.get('description',''))[:400])
-                for rel in extracted.get('relationships',[]):
-                    src=str(rel.get('source','')).strip(); dst=str(rel.get('target','')).strip()
-                    if not src or not dst: continue
-                    akey=src.casefold(); bkey=dst.casefold()
-                    # Relationship labels are normalized to prevent arbitrary Cypher identifiers.
-                    proposed_label=re.sub(r'[^A-Z0-9_]','_',str(rel.get('type','')).upper())[:40]
-                    label=proposed_label if proposed_label in RELATION_TYPES else 'RELATED_TO'
-                    d.execute_query(f"MATCH (c:Chunk {{id:$cid}}) MERGE (a:Entity {{key:$a}}) ON CREATE SET a.name=$an,a.type='Entity' MERGE (b:Entity {{key:$b}}) ON CREATE SET b.name=$bn,b.type='Entity' MERGE (c)-[:MENTIONS]->(a) MERGE (c)-[:MENTIONS]->(b) MERGE (a)-[r:{label}]->(b) ON CREATE SET r.description=$desc SET r.evidence_ids=coalesce(r.evidence_ids,[])+CASE WHEN $cid IN coalesce(r.evidence_ids,[]) THEN [] ELSE [$cid] END",cid=cid,a=akey,an=src,b=bkey,bn=dst,desc=str(rel.get('description',''))[:400])
-            d.execute_query("MATCH (doc:Document {id:$id}) SET doc.status='indexed'",id=did)
-        return {"id":did,"name":name,"status":"indexed","chunks":len(split_text(text))}
-    except Exception as e:
+        return await asyncio.to_thread(_index_document, did, name, path)
+    except Exception:
         try:
             with driver() as d: d.execute_query("MATCH (doc:Document {id:$id}) DETACH DELETE doc",id=did)
         except Exception: pass

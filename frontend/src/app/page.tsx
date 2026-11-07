@@ -97,11 +97,11 @@ export default function SupplyChainExplorerPage() {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [searchFilter, setSearchFilter] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{
     text: string;
-    type: "info" | "success" | "error";
+    type: "success" | "error";
   } | null>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -172,11 +172,8 @@ export default function SupplyChainExplorerPage() {
   // Upload file handler
   const handleFileUpload = async (file: File) => {
     if (!file) return;
-    setUploading(true);
-    setStatusMsg({
-      text: `Extracting entities from ${file.name}…`,
-      type: "info",
-    });
+    setUploadingFile(file.name);
+    setStatusMsg(null);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -200,7 +197,7 @@ export default function SupplyChainExplorerPage() {
       const message = err instanceof Error ? err.message : "Upload failed";
       setStatusMsg({ text: message, type: "error" });
     } finally {
-      setUploading(false);
+      setUploadingFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -208,7 +205,7 @@ export default function SupplyChainExplorerPage() {
   // Delete document handler
   const handleDeleteDocument = async (id: string, name: string) => {
     setDeletingId(id);
-    setStatusMsg({ text: `Deleting ${name}…`, type: "info" });
+    setStatusMsg(null);
     try {
       const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -533,20 +530,20 @@ export default function SupplyChainExplorerPage() {
               const f = e.dataTransfer.files?.[0];
               if (f) handleFileUpload(f);
             }}
-            className={`group relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition cursor-pointer ${
-              uploading
+            className={`group relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition cursor-pointer min-w-0 ${
+              uploadingFile
                 ? "border-teal-300 bg-teal-50/40 pointer-events-none"
                 : "border-slate-200 hover:border-teal-500 hover:bg-teal-50/30 bg-slate-50/60"
             }`}
           >
-            {uploading ? (
+            {uploadingFile ? (
               <>
                 <Loader2 className="w-6 h-6 text-teal-600 animate-spin mb-2" />
-                <span className="text-xs font-semibold text-teal-700">
-                  Processing document…
+                <span className="text-xs font-semibold text-teal-700 truncate max-w-full px-2">
+                  Indexing {uploadingFile}…
                 </span>
                 <span className="text-[11px] text-slate-500 mt-0.5">
-                  Extracting entities &amp; graph links
+                  Extracting entities &amp; graph links in parallel
                 </span>
               </>
             ) : (
@@ -573,23 +570,19 @@ export default function SupplyChainExplorerPage() {
             />
           </label>
 
-          {/* Status Toast */}
+          {/* Status Toast (only for success or error — no duplicate spinner) */}
           {statusMsg && (
             <div
               className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs border ${
                 statusMsg.type === "error"
                   ? "bg-red-50 border-red-200 text-red-700"
-                  : statusMsg.type === "success"
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                  : "bg-slate-100 border-slate-200 text-slate-600"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700"
               }`}
             >
               {statusMsg.type === "error" ? (
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              ) : statusMsg.type === "success" ? (
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               ) : (
-                <Loader2 className="w-3.5 h-3.5 shrink-0 mt-0.5 animate-spin" />
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               )}
               <span className="break-words min-w-0 flex-1">
                 {statusMsg.text}
