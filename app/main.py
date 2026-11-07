@@ -147,6 +147,8 @@ def chat(req:Question):
         if key not in seen and x['evidence']:
             seen.add(key); unique.append({"document":x['document'],"text":x['evidence']})
     return {"answer":answer,"sources":unique[:8]}
+FRONTEND_BUILD=Path("frontend/out")
 @app.get('/')
-def index(): return FileResponse('ui/index.html')
-app.mount('/',StaticFiles(directory='ui',html=True),name='ui')
+def index(): return FileResponse(FRONTEND_BUILD/'index.html')
+if FRONTEND_BUILD.exists():
+    app.mount('/',StaticFiles(directory=str(FRONTEND_BUILD),html=True),name='frontend')
